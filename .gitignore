@@ -45,8 +45,12 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Virtual environments
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Virtual environments
 .venv
 env/
 venv/
@@ -73,3 +77,6 @@ Thumbs.db
 # Canvas specific
 *.log
 .canvas/
+
+# Test scripts
+test*
