@@ -1,12 +1,12 @@
 {
     "sdk_version": "0.1.4",
-    "plugin_version": "0.0.1",
+    "plugin_version": "0.0.3",
     "name": "orh_canvas_plugin",
     "description": "OneRoom Health Canvas Plugin - Captures TEST-OneRoomHealth appointment events with comprehensive patient, provider, and scheduling data, then sends secure webhook notifications to OneRoom backend for real-time appointment management.",
     "components": {
         "protocols": [
             {
-                "class": "protocols.my_protocol:Protocol",
+                "class": "orh_canvas_plugin.protocols.my_protocol:Protocol",
                 "description": "Responds to TEST-OneRoomHealth appointment lifecycle events (created, updated, booked, cancelled, rescheduled) and forwards comprehensive appointment, patient, and provider data to OneRoom backend via secure webhook."
             }
         ],

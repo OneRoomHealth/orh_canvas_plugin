@@ -11,27 +11,35 @@ from canvas_sdk.v1.data.patient import Patient
 from canvas_sdk.v1.data.staff import Staff
 from logger import log
 
-
 # Inherit from BaseProtocol to properly get registered for events
 class Protocol(BaseProtocol):
     """OneRoom Health Canvas Plugin - Responds to appointment events for TEST-OneRoomHealth note type and calls OneRoom backend webhook."""
 
     # Name the event types you wish to run in response to
     RESPONDS_TO = [
-        EventType.Name(EventType.Value('APPOINTMENT_CHECKED_IN')),
-        EventType.Name(EventType.Value('APPOINTMENT_CREATED')),
-        EventType.Name(EventType.Value('APPOINTMENT_NO_SHOWED')),
-        EventType.Name(EventType.Value('APPOINTMENT_RESTORED')),
-        EventType.Name(EventType.Value('APPOINTMENT_UPDATED')),
-        EventType.Name(EventType.Value('APPOINTMENT_CANCELED')),
-        EventType.Name(EventType.Value('APPOINTMENT_RESCHEDULED')),
+        EventType.Name(EventType.APPOINTMENT_CHECKED_IN),
+        EventType.Name(EventType.APPOINTMENT_CREATED),
+        EventType.Name(EventType.APPOINTMENT_RESTORED),
+        EventType.Name(EventType.APPOINTMENT_UPDATED),
+        EventType.Name(EventType.APPOINTMENT_CANCELED),
+        EventType.Name(EventType.APPOINTMENT_RESCHEDULED),
+        EventType.Name(EventType.APPOINTMENT_NO_SHOWED)
     ]
 
     NARRATIVE_STRING = "OneRoom Health: TEST-OneRoomHealth appointment event processed and sent to backend."
 
+    def __init__(self, event, secrets, environment):
+        """Initialize the protocol and log that it's loaded."""
+        super().__init__(event, secrets, environment)
+        log.info("🚀 OneRoom Health Canvas Plugin initialized and ready to respond to appointment events!")
+        log.info(f"📋 Responding to events: {[event for event in self.RESPONDS_TO]}")
+
     def compute(self) -> list[Effect]:
         """This method gets called when an appointment event occurs."""
-        
+        log.info(f"✅ Plugin triggered for event: {self.event.type}")
+        target_resource_type = getattr(self.event.target, 'resourceType', None) or getattr(self.event.target, 'type', None)
+        log.info(f"Target resource: {target_resource_type}")
+        log.info(f"Context: {self.event.context}")
         try:
             # Get appointment details
             appointment_id = self.event.target.id
@@ -45,6 +53,27 @@ class Protocol(BaseProtocol):
                 appointments = Appointment.objects.filter(id=appointment_id)
                 if appointments:
                     appointment = appointments[0]
+            log.info(f"Appointment Details: {appointment}")
+            if appointment:
+                # Log specific appointment attributes we're interested in
+                log.info(f"Appointment ID: {getattr(appointment, 'id', 'N/A')}")
+                log.info(f"Appointment DBID: {getattr(appointment, 'dbid', 'N/A')}")
+                log.info(f"Start Time: {getattr(appointment, 'start_time', 'N/A')}")
+                log.info(f"End Time: {getattr(appointment, 'end_time', 'N/A')}")
+                log.info(f"Status: {getattr(appointment, 'status', 'N/A')}")
+                log.info(f"Note Type ID: {getattr(appointment, 'note_type_id', 'N/A')}")
+                log.info(f"Note ID: {getattr(appointment, 'note_id', 'N/A')}")
+                log.info(f"Description: {getattr(appointment, 'description', 'N/A')}")
+                log.info(f"Comment: {getattr(appointment, 'comment', 'N/A')}")
+                try:
+                    log.info(f"Patient: {getattr(appointment, 'patient', 'N/A')}")
+                    log.info(f"Provider: {getattr(appointment, 'provider', 'N/A')}")
+                    log.info(f"Location: {getattr(appointment, 'location', 'N/A')}")
+                    log.info(f"Appointment Type: {getattr(appointment, 'appointment_type', 'N/A')}")
+                    log.info(f"Note Type Name: {getattr(appointment, 'note', 'NotFound')}")
+
+                except Exception as e:
+                    log.warning(f"Error accessing appointment relationships: {str(e)}")
             
             if not appointment:
                 log.error(f"Could not retrieve appointment with ID: {appointment_id}")
@@ -94,12 +123,14 @@ class Protocol(BaseProtocol):
             except Exception as e:
                 log.warning(f"Could not parse appointment_type: {str(e)}")
 
+            log.info(f"appt_type_code: {appt_type_code} appt_type_display: {appt_type_display}  appt_type_system: {appt_type_system}")
             # Detect TEST-OneRoomHealth via appointment type values
             if not is_test_orh_appointment:
                 if (
                     str(appt_type_display).lower() == 'test-oneroomhealth' or
                     str(appt_type_code).upper() == 'TEST-ORH' or
-                    str(appt_type_system).upper() == 'TEST-ORH'
+                    str(appt_type_system).upper() == 'TEST-ORH' or
+                    note_type_id == 82  # Assuming note_type_id 82 indicates TEST-OneRoomHealth   
                 ):
                     is_test_orh_appointment = True
                     log.info(f"Found TEST-OneRoomHealth via appointment_type (code={appt_type_code}, display={appt_type_display}, system={appt_type_system})")
@@ -138,6 +169,7 @@ class Protocol(BaseProtocol):
                     log.warning(f"Could not parse contained Endpoint for meeting link: {str(e)}")
             
             # Only process appointments for TEST-OneRoomHealth
+            is_test_orh_appointment = True
             if not is_test_orh_appointment:
                 log.info(f"Skipping appointment {appointment_id} - not TEST-OneRoomHealth type (note_type_id: {note_type_id}, appointment_type_code: {appt_type_code}, appointment_type_display: {appt_type_display})")
                 return []
@@ -161,7 +193,8 @@ class Protocol(BaseProtocol):
                     "created_at": str(patient.created) if hasattr(patient, 'created') and patient.created else None,
                     "modified_at": str(patient.modified) if hasattr(patient, 'modified') and patient.modified else None
                 }
-            print(f"Patient Data:", patient_data)
+            #print(f"Patient Data:", patient_data)
+            log.info(f"Patient Data: {patient_data} ")
             # Get provider details  
             provider_data = {}
             if hasattr(appointment, 'provider') and appointment.provider:
@@ -177,7 +210,8 @@ class Protocol(BaseProtocol):
                     "created_at": str(provider.created) if hasattr(provider, 'created') and provider.created else None,
                     "modified_at": str(provider.modified) if hasattr(provider, 'modified') and provider.modified else None
                 }
-            print(f"Provider Data:", provider_data)
+            #print(f"Provider Data:", provider_data)
+            log.info(f"Provider Data: {provider_data} ")
             # Build schedule_user_data from participants
             schedule_user_data = []
             try:
@@ -228,13 +262,47 @@ class Protocol(BaseProtocol):
             except Exception as e:
                 log.warning(f"Could not build schedule_user_data from participants: {str(e)}")
             
+            log.info(f"schedule_user_data Data: {schedule_user_data} ")
             # Extract comprehensive appointment details
+            start_time = str(appointment.start_time) if hasattr(appointment, 'start_time') and appointment.start_time else None
+            end_time = str(appointment.end_time) if hasattr(appointment, 'end_time') and appointment.end_time else None
+            duration_minutes = getattr(appointment, 'duration_minutes', None)
+            
+            # Format start_time to include milliseconds and Z timezone
+            if start_time:
+                try:
+                    from datetime import datetime
+                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    start_time = start_dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                except Exception as e:
+                    log.warning(f"Could not format start_time: {str(e)}")
+            
+            # Calculate end_time from start_time + duration_minutes if end_time is not available
+            if not end_time and start_time and duration_minutes:
+                try:
+                    from datetime import datetime, timedelta
+                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    end_dt = start_dt + timedelta(minutes=duration_minutes)
+                    end_time = end_dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                    log.info(f"Start_time: {start_dt}  duration: {duration_minutes}")
+                    log.info(f"Calculated end_time from start_time + duration: {end_time}")
+                except Exception as e:
+                    log.warning(f"Could not calculate end_time from start_time + duration: {str(e)}")
+            elif end_time:
+                # Format existing end_time to include milliseconds and Z timezone
+                try:
+                    from datetime import datetime
+                    end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                    end_time = end_dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                except Exception as e:
+                    log.warning(f"Could not format end_time: {str(e)}")
+            
             appointment_data = {
                 "id": appointment_id,
                 "dbid": getattr(appointment, 'dbid', None),
-                "start_time": str(appointment.start_time) if hasattr(appointment, 'start_time') and appointment.start_time else None,
-                "end_time": str(appointment.end_time) if hasattr(appointment, 'end_time') and appointment.end_time else None,
-                "duration_minutes": getattr(appointment, 'duration_minutes', None),
+                "start_time": start_time,
+                "end_time": end_time,
+                "duration_minutes": duration_minutes,
                 "status": getattr(appointment, 'status', None),
                 "comment": getattr(appointment, 'comment', None),
                 "note_id": note_id,
@@ -244,17 +312,17 @@ class Protocol(BaseProtocol):
                     "display": appt_type_display,
                     "system": appt_type_system
                 },
-                "location": appointment.location.name if hasattr(appointment, 'location') and appointment.location and hasattr(appointment.location, 'name') else None,
+                "location": self._get_location_name(appointment),
                 "meeting_link": meeting_link,
                 "telehealth_instructions_sent": getattr(appointment, 'telehealth_instructions_sent', None),
                 "entered_in_error": str(appointment.entered_in_error) if getattr(appointment, 'entered_in_error', None) else None,
                 "description": getattr(appointment, 'description', None),
                 "created_at": str(appointment.created) if hasattr(appointment, 'created') and appointment.created else None,
                 "modified_at": str(appointment.modified) if hasattr(appointment, 'modified') and appointment.modified else None,
-                "parent_appointment_id": appointment.parent_appointment.id if getattr(appointment, 'parent_appointment', None) else None,
-                "appointment_rescheduled_from_id": appointment.appointment_rescheduled_from.id if getattr(appointment, 'appointment_rescheduled_from', None) else None
+                "parent_appointment_id": str(appointment.parent_appointment.id) if getattr(appointment, 'parent_appointment', None) else None,
+                "appointment_rescheduled_from_id": str(appointment.appointment_rescheduled_from.id) if getattr(appointment, 'appointment_rescheduled_from', None) else None
             }
-            
+            log.info(f"Appointment Data: {appointment_data} ")
             # Add external identifiers
             try:
                 external_identifiers = []
@@ -309,7 +377,7 @@ class Protocol(BaseProtocol):
                 "schedule_user_data": schedule_user_data,
                 "context": self.event.context
             }
-            
+            log.info(f"webhook_payload Data: {webhook_payload} ")
             # Call OneRoom backend webhook
             self._send_webhook(webhook_payload, appointment_id)
             
@@ -338,6 +406,36 @@ class Protocol(BaseProtocol):
             age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
             return age
         except:
+            return None
+    
+    def _get_location_name(self, appointment):
+        """Extract location name from appointment location object."""
+        try:
+            if not hasattr(appointment, 'location') or not appointment.location:
+                return None
+                
+            location = appointment.location
+            
+            # If location is already a string, return it
+            if isinstance(location, str):
+                return location
+                
+            # Try different possible attributes for the location name
+            if hasattr(location, 'name') and location.name:
+                return str(location.name)
+            elif hasattr(location, 'display') and location.display:
+                return str(location.display)
+            elif hasattr(location, 'text') and location.text:
+                return str(location.text)
+            else:
+                # If it's an object, try to convert to string
+                location_str = str(location)
+                # If it's not just the object representation, return it
+                if not location_str.startswith('<') and 'object at' not in location_str:
+                    return location_str
+                return None
+        except Exception as e:
+            log.warning(f"Could not extract location name: {str(e)}")
             return None
     
     def _send_webhook(self, payload, appointment_id):
@@ -386,10 +484,13 @@ class Protocol(BaseProtocol):
                 time.sleep(backoff)
                 backoff *= 2
 
-        except requests.exceptions.RequestException as e:
-            log.error(f"Error calling OneRoom webhook: {str(e)}")
         except Exception as e:
-            log.error(f"Unexpected error in OneRoom webhook call: {str(e)}")
+            # Handle all exceptions generically since Canvas sandbox restricts access to requests.exceptions
+            error_msg = str(e)
+            if "requests" in error_msg.lower():
+                log.error(f"Error calling OneRoom webhook (network): {error_msg}")
+            else:
+                log.error(f"Unexpected error in OneRoom webhook call: {error_msg}")
     def _build_room_event_input(self, payload: dict) -> dict:
         """Map our payload into RoomEventInput for updateRoomEvents mutation."""
         try:
@@ -474,12 +575,13 @@ class Protocol(BaseProtocol):
                 'description': appt.get('description'),
                 'createdAt': appt.get('created_at'),
                 'modifiedAt': appt.get('modified_at'),
-                'parentAppointmentId': appt.get('parent_appointment_id'),
-                'rescheduledFromAppointmentId': appt.get('appointment_rescheduled_from_id'),
+                'parentAppointmentId': str(appt.get('parent_appointment_id')) if appt.get('parent_appointment_id') else None,
+                'rescheduledFromAppointmentId': str(appt.get('appointment_rescheduled_from_id')) if appt.get('appointment_rescheduled_from_id') else None,
                 'externalIdentifiers': appt.get('external_identifiers'),
                 'metadata': appt.get('metadata')
             }
 
+            log.info(f"event_input Data: {event_input} ")
             # Remove keys with None to keep payload clean
             return {k: v for k, v in event_input.items() if v is not None}
         except Exception as e:
